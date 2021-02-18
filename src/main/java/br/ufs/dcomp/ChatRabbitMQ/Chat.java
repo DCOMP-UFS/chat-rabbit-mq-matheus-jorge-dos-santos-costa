@@ -3,8 +3,6 @@ package br.ufs.dcomp.ChatRabbitMQ;
 import com.rabbitmq.client.*;
 import java.io.IOException;
 import java.util.*;
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
 import com.google.protobuf.ByteString;
 
 public class Chat {
@@ -12,51 +10,74 @@ public class Chat {
 
   public static void main(String[] argv) throws Exception {
     ConnectionFactory factory = new ConnectionFactory();
-    factory.setHost("ec2-54-174-158-151.compute-1.amazonaws.com");
-    factory.setUsername("matheusJorge");
+    
+    factory.setHost("ec2-54-221-15-76.compute-1.amazonaws.com");
+    factory.setUsername("matheu|Jorge");
     factory.setPassword("12345678");
     factory.setVirtualHost("/");
     Connection connection = factory.newConnection();
     Channel channel = connection.createChannel();
-    System.out.print("User: ");
+    Channel channel_arquivos = connection.createChannel();
+    
     Scanner entrada = new Scanner(System.in);
+    Grupo grupo = new Grupo(channel,channel_arquivos);
+    
+    Mensagem line = new Mensagem();
+    
+    System.out.print("User: ");
     String user = entrada.nextLine();
+    
+    String nomeGrupo = "";
+    line.criarDiretorio(user);
+    
     String QUEUE_NAME = user;
+    String QUEUE_NAME_FILE = QUEUE_NAME + "F";
     channel.queueDeclare(QUEUE_NAME, false,   false,     false,       null);
-
+    channel_arquivos.queueDeclare(QUEUE_NAME_FILE, false,   false,     false,       null);
+    
     Consumer consumer = new DefaultConsumer(channel) {
       public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body)
         throws IOException {
-        
-          String message = new String(body, "UTF-8");
-          System.out.println(message);
-          System.out.println(user + ">>");
+          try{
+            System.out.println(line.recebeMessagem(body, user));
+          } catch (Exception ex){
+            System.out.println (ex.toString());
+          }
+          System.out.println(Chat.usuario + ">>");
         }
     };
-    DateFormat day = new SimpleDateFormat("dd/MM/yyyy");
-    DateFormat hour = new SimpleDateFormat("HH:mm");
-  
-    Date date = new Date();
-    String data = day.format(date);
-    String hora = hour.format(date);
+    
+
     String msg = "";
     
-    while(true){
-      channel.basicConsume(QUEUE_NAME, true, consumer);
+    channel.basicConsume(QUEUE_NAME, true,    consumer);
+    channel_arquivos.basicConsume(QUEUE_NAME_FILE, true, consumer);
+
+    while(msg.equals(".") == false){
+      System.out.print(Chat.usuario + ">> " + "");
       msg = entrada.nextLine();
-      while(msg.charAt(0) == '@'){
+
+      if(msg.equals(".") == true) 
+        break;
+      if(msg.charAt(0) == '@'){
         Chat.usuario = msg;
-      
-        do{
-          System.out.print(Chat.usuario + ">> ");
-          msg = entrada.nextLine();
-          if(msg.charAt(0) != '@'){
-            String message = "(" + data + " às " + hora + ") " + user + " diz: " + msg;
-            channel.basicPublish("",Chat.usuario.substring(1, Chat.usuario.length()), null,  message.getBytes("UTF-8"));
-          }
-        }while(msg.charAt(0) != '@');
+        nomeGrupo = "";
+      }
+      else if(msg.charAt(0) == '#'){
+        Chat.usuario = msg;
+        nomeGrupo = msg.substring(1);
+      }
+      else if(msg.charAt(0) == '!'){
+        grupo.verificaMensagem(msg, user, Chat.usuario.substring(1), nomeGrupo);
+      }
+      else if(Chat.usuario.equals("") == false){  
+        if(Chat.usuario.charAt(0) == '#')
+          line.enviarMessagem(user, msg, "", channel, nomeGrupo);
+        else 
+          line.enviarMessagem(user, msg, Chat.usuario.substring(1), channel, "");
       }
     }
+    channel.close();
+    connection.close();
   }
-  
 }
